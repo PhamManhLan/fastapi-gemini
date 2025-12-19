@@ -1,15 +1,10 @@
-from pydantic import BaseModel, EmailStr
+from sqlalchemy import Column, Integer, String, Boolean
+from ..database.db import Base
 
-class UserBase(BaseModel):
-    email: EmailStr
-    full_name: str | None = None
-    disabled: bool = False
+class User(Base):
+    __tablename__ = "users"
 
-class UserCreate(UserBase):
-    password: str
-
-class UserInDB(UserBase):
-    hashed_password: str
-
-class User(UserBase):
-    pass
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+    disabled = Column(Boolean, default=False)

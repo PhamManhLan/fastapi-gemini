@@ -7,28 +7,49 @@ export default function LoginPage({ onLoginSuccess }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setError('');
 
-    if (!username.trim() || !password.trim()) {
-      setError('Vui lòng nhập đầy đủ thông tin');
-      return;
+  if (!username.trim() || !password.trim()) {
+    setError('Vui lòng nhập đầy đủ thông tin');
+    return;
+  }
+
+  try {
+    if (!isLogin) {
+      await register(username, password);
     }
 
-    try {
-      if (!isLogin) {
-        await register(username, password);
+    const res = await login(username, password);
+    localStorage.setItem('token', res.data.access_token);
+    onLoginSuccess(username);
+
+  } catch (err) {
+    let errorMessage = 'Đã có lỗi xảy ra';
+
+    if (err.response?.data?.detail) {
+      const detail = err.response.data.detail;
+
+      // Nếu detail là string thì hiển thị
+      if (typeof detail === 'string') {
+        errorMessage = detail;
       }
-
-      const res = await login(username, password);
-      localStorage.setItem('token', res.data.access_token);
-      onLoginSuccess(username);
-
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Sai tài khoản hoặc mật khẩu');
+      // Nếu detail là array object (lỗi validation) thì lấy msg đầu tiên
+      else if (Array.isArray(detail) && detail.length > 0) {
+        errorMessage = detail[0].msg || 'Dữ liệu không hợp lệ';
+      }
+      // Nếu là object đơn thì lấy msg
+      else if (detail.msg) {
+        errorMessage = detail.msg;
+      }
+    } else {
+      errorMessage = 'Sai tài khoản hoặc mật khẩu';
     }
-  };
+
+    setError(errorMessage);
+  }
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-100 flex items-center justify-center p-4">

@@ -14,14 +14,14 @@ export const login = (username, password) => {
   const formData = new URLSearchParams();
   formData.append('username', username);
   formData.append('password', password);
-  return api.post('/api/v1/auth/login', formData, {
+  return api.post('/auth/login', formData, {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
   });
 };
 
 export const register = (username, password) => {
-  return api.post('/api/v1/auth/register', { username, password });
+  return api.post('/auth/register', { username, password });
 };
 
 export const sendMessage = (content) =>
-  api.post('/api/v1/chat', { content });
+  api.post('/chat', { content });

@@ -1,15 +1,22 @@
-from ..core.security import verify_password
-from ..database.fake_db import fake_users_db
+from sqlalchemy.orm import Session
+from ..models.user import User
+from ..core.security import verify_password, get_password_hash
 
-def get_user(username: str):
-    if username in fake_users_db:
-        return fake_users_db[username]
-    return None
+def get_user(db: Session, username: str):
+    return db.query(User).filter(User.username == username).first()
 
-def authenticate_user(username: str, password: str):
-    user = get_user(username)
+def authenticate_user(db: Session, username: str, password: str):
+    user = get_user(db, username)
     if not user:
         return False
-    if not verify_password(password, user["hashed_password"]):
+    if not verify_password(password, user.hashed_password):
         return False
     return user
+
+def create_user(db: Session, username: str, password: str):
+    hashed_password = get_password_hash(password)
+    db_user = User(username=username, hashed_password=hashed_password)
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user

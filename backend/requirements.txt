@@ -4,3 +4,9 @@ python-dotenv
 google-generativeai
 python-jose[cryptography]
 pydantic-settings
+psycopg2-binary
+sqlalchemy
+asyncpg
+pydantic-settings
+chromadb
+sentence-transformers
