@@ -1,6 +1,5 @@
 import chromadb
 from sentence_transformers import SentenceTransformer
-import os
 
 model = SentenceTransformer('keepitreal/vietnamese-sbert')
 

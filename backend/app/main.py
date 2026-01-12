@@ -4,7 +4,6 @@ from app.routers.auth import router as auth_router
 from app.routers.chat import router as chat_router
 from app.database.db import Base, engine
 from app.core.vector_db import load_knowledge_if_empty
-from app.models.chat_history import ChatHistory
 
 Base.metadata.create_all(bind=engine)
 
