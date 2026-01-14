@@ -1,12 +1,14 @@
-# app/core/llm.py
+# app/core/gemini.py
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from pydantic_settings import BaseSettings
-from langchain_core.runnables import RunnableParallel, RunnablePassthrough, RunnableLambda, RunnableBranch
+from langchain_core.runnables import RunnableParallel, RunnableLambda, RunnableBranch
 from langchain_core.output_parsers import StrOutputParser
 from operator import itemgetter
-from app.core.vector_db import collection, model
+from app.core.vector_db import get_retriever
+
+retriever = get_retriever()
 
 class Settings(BaseSettings):
     GEMINI_API_KEY: str
@@ -65,86 +67,66 @@ Chỉ trả về nội dung gợi ý, không nói thêm gì khác (không dùng 
     """),
     ("human", "Gợi ý cho tôi nhé!")
 ])
-def retrieve_context_fn(inputs: dict) -> str:
+def retrieve_context_fn(inputs):
     question = inputs.get("question", "")
-    if not isinstance(question, str):
-        return ""
-    query = question.strip().lower()
-    if not query:
-        return ""
-    try:
-        query_emb = model.encode([query]).tolist()
-        results = collection.query(
-                query_embeddings=[query_emb],
-                n_results=5
-            )
-        docs = results.get("documents", [[]])[0]
-        return "\n".join(docs) if docs else ""
-    except Exception as e:
-            print(f"[VectorDB][ERROR] {e}")
-            return "" # Trả về "" tốt hơn vì LLM có bắt lỗi không có thông tin phù hợp context
+    if not isinstance(question, str) or not question.strip():
+        return {**inputs, "context": ""}
 
-retriever = RunnableLambda(retrieve_context_fn)
-def format_output(x: dict) -> str:
-    answer = x.get("answer", "").strip()
-    suggestion = x.get("suggestion", "").strip() or "Hiện chưa có gợi ý phù hợp ạ~"
+    docs = retriever.invoke(question)
 
-    source = ""
-    context = x.get("context", "")
-    if context:
-        ctx = context[:350].replace("\n", " ")
-        source = f"\n\n(Nguồn tham khảo: {ctx}...)"
+    context_text = "\n\n".join(
+        f"[Nguồn: {doc.metadata.get('source', 'hue_knowledge.txt')}] {doc.page_content}"
+        for doc in docs
+    ) if docs else ""
 
-    return f"{answer}\n\n**Gợi ý thêm:** {suggestion}{source}"
-yes_branch = (
-    RunnableParallel(
-        # question=itemgetter("question"),
-        # username=itemgetter("username"),
-        # context=itemgetter("context"),
-        # answer=main_prompt | llm | StrOutputParser(),
-        # suggestion=suggestion_prompt | llm | StrOutputParser(),
-        question=itemgetter("question"),
-        username=itemgetter("username"),
-        context=itemgetter("context"),
-        answer=main_prompt | llm | StrOutputParser(),
-        suggestion=RunnableLambda(lambda _: ""), #giảm request tránh crash server/ keyfree.
-    )
-)
-no_branch = RunnableLambda(
-    lambda x: {
-        "question": x["question"],
-        "username": x["username"],
-        "context": "",
-        "answer": "Mình hiện chỉ hỗ trợ thông tin du lịch tại Huế thôi ạ 😊 Bạn muốn hỏi về địa điểm, ẩm thực hay trải nghiệm nào ở Huế không?",
-        "suggestion": "",
+    return {
+        **inputs,
+        "context": context_text
     }
-)
-
 
 chain = (
-    # Bước 1: Nhận input
+    #Chuẩn hóa input
     RunnableParallel(
-        question=itemgetter("question"),  #bug dict != string
-        username = itemgetter("username") #username=RunnableLambda(lambda x: x.get("username", "du khách")), ##đồng bộ với question
+        question=itemgetter("question"),
+        username=itemgetter("username")
     )
-
-    # Bước 2: Lấy context + phân loại
+    
+    #Retrieve + Phân loại
     | RunnableParallel(
         question=itemgetter("question"),
         username=itemgetter("username"),
-        context=retriever,
-        is_hue=classification_prompt | llm | StrOutputParser(),
+        context=RunnableLambda(retrieve_context_fn) | itemgetter("context"),
+        is_hue=classification_prompt | llm | StrOutputParser()
     )
-
-    # Bước 3: Rẽ nhánh theo phân loại
+    
+    #Rẽ nhánh YES/NO
     | RunnableBranch(
+        #YES: có context Huế → trả lời
         (
-            lambda x: x["is_hue"].strip().upper() == "YES",
-            yes_branch,
+            lambda x: "YES" in x["is_hue"].upper(),
+            RunnableParallel(
+                question=itemgetter("question"),
+                username=itemgetter("username"),
+                context=itemgetter("context"),
+                answer=main_prompt | llm | StrOutputParser(),
+                #suggestion=suggestion_prompt | llm | StrOutputParser()   ## giảm request/ freekey
+            )
         ),
-        no_branch
+        #NO
+        RunnableLambda(lambda x: {
+            "question": x["question"],
+            "username": x["username"],
+            "context": "",
+            "answer": "Mình hiện chỉ hỗ trợ thông tin du lịch tại Huế thôi ạ 😊 Bạn muốn hỏi về địa điểm, ẩm thực hay trải nghiệm nào ở Huế không?",
+            "suggestion": ""
+        })
     )
-
-    # Bước 4: Format output cuối
-    | RunnableLambda(format_output)
+    
+    #Format output
+    | RunnableLambda(lambda x: {
+        "answer": x["answer"].strip(),
+        "suggestion": (x.get("suggestion") or "").strip(),
+        "context": x["context"]
+    })
+    | RunnableLambda(lambda x: f"{x['answer']}\n\n**Gợi ý thêm:** {x['suggestion']}" if x['suggestion'] else x['answer'])
 )

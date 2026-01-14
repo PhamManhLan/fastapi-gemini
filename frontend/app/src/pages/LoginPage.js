@@ -101,7 +101,7 @@ const handleSubmit = async (e) => {
         </p>
 
         <p className="text-center text-xs text-gray-500 mt-6">
-          Test nhanh: <strong>admin</strong> / <strong>123456</strong>
+          Test nhanh: <strong>test</strong> / <strong>test123</strong>
         </p>
       </div>
     </div>

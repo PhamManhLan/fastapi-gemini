@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routers.auth import router as auth_router
 from app.routers.chat import router as chat_router
 from app.database.db import Base, engine
-from app.core.vector_db import load_knowledge_if_empty
 
 Base.metadata.create_all(bind=engine)
 
@@ -28,7 +27,8 @@ app.include_router(chat_router)
 # Load data vào Chroma khi server khởi động
 @app.on_event("startup")
 async def startup_event():
-    load_knowledge_if_empty()
+    from app.core.vector_db import get_vectorstore
+    get_vectorstore()
     print("Đã tải kiến thức du lịch Huế vào Vector DB!")
 
 # Route gốc
